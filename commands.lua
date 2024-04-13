@@ -63,7 +63,7 @@ function init(plugin)
             "Merged to active alpha lock cel",
             function()
                 -- Loop trough all selected cels
-                for i, cel in ipairs(app.range.cels) do
+                for _, cel in ipairs(app.range.cels) do
                     -- Ignore focused cel
                     if cel ~= app.cel then
                         -- Loop trough all pixels of focused cel
@@ -87,4 +87,115 @@ function init(plugin)
             end)
         end
     }
+
+    plugin:newCommand{
+        id="testCommand",
+        title="Test",
+        group="material_texture_utils",
+        onclick=function()
+            local imageFileTypes = {"jpg", "jpeg", "png"};
+            local dlg = Dialog("Convert Textures")
+
+            -- Always create new row
+            dlg:newrow{ always=true }
+
+            -- Create string field used for autofill identifier
+            dlg:entry{ id="folder", label="Folder path"}
+            dlg:entry{ id="identifier", label="Common file name"}
+
+            local function updateIdentifier()
+                if dlg.data.folder ~= "" then return end
+                if dlg.data.identifier ~= "" then return end
+                for _, path in pairs(dlg.data) do
+                    if type(path) == "string" then
+                        if path ~= "" then
+                            local fileName = app.fs.fileName(path)
+                            dlg:modify { id="folder", text=app.fs.filePath(path) }
+                            dlg:modify { id="identifier", text=GetPrefixBeforeLastUnderscore(fileName) }
+                            break
+                        end
+                    end
+                end
+            end
+
+            -- Create file fields for all possible textures
+            dlg:file{ id="albedo", label="Albedo Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="alpha", label="Alpha Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="ao", label="Ambient Occlusion Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="metal", label="Metal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="roughness", label="Roughness Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="normal", label="Normal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="emission", label="Emission Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+
+            -- Create button to autofill fields if one is selected
+            dlg:button{ id="autofill", text="Auto find textures", onclick=function()
+                -- If identifier is sete attempt autofill
+                if app.fs.isDirectory(dlg.data.folder) and dlg.data.identifier ~= "" then
+
+                    local function filterFilenames(filenames, searchString)
+                        local filteredFilenames = {}
+                        for _, filename in ipairs(filenames) do
+                            if filename:find(searchString) then
+                                table.insert(filteredFilenames, filename)
+                            end
+                        end
+                        return filteredFilenames
+                    end
+
+                    local matchingFiles = filterFilenames(app.fs.listFiles(dlg.data.folder), dlg.data.identifier)
+
+                    local function findFirstMatch(filenames, searchStrings, stringToRemove)
+                        for _, filename in ipairs(filenames) do
+                            local modifiedFilename = filename:gsub(stringToRemove, "") -- Remove the specified string
+                            local lowercaseFilename = modifiedFilename:lower() -- Convert filename to lowercase
+                            for _, searchString in ipairs(searchStrings) do
+                                local lowercaseSearchString = searchString:lower() -- Convert search string to lowercase
+                                if lowercaseFilename:find(lowercaseSearchString) then
+                                    return filename
+                                end
+                            end
+                        end
+                        return nil -- If no match is found
+                    end
+
+                    if not app.fs.isFile(dlg.data.albedo) then
+                        dlg:modify { id="albedo", filename=findFirstMatch(matchingFiles, {"albedo", "color", "base"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.alpha) then
+                        dlg:modify { id="alpha", filename=findFirstMatch(matchingFiles, {"alpha", "opacity"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.ao) then
+                        dlg:modify { id="ao", filename=findFirstMatch(matchingFiles, {"ambientocclusion", "occlusion", "occ"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.metal) then
+                        dlg:modify { id="metal", filename=findFirstMatch(matchingFiles, {"metal"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.roughness) then
+                        dlg:modify { id="roughness", filename=findFirstMatch(matchingFiles, {"rough"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.normal) then
+                        dlg:modify { id="normal", filename=findFirstMatch(matchingFiles, {"normal"}, dlg.data.identifier) }
+                    end
+                    if not app.fs.isFile(dlg.data.emission) then
+                        dlg:modify { id="emission", filename=findFirstMatch(matchingFiles, {"emission"}, dlg.data.identifier) }
+                    end
+                end
+            end }
+
+            -- No onclick overwrite automatically closes dialog
+            dlg:button{ id="generate", text="Confirm" }
+            dlg:button{ id="cancel", text="Cancel" }
+            dlg:show()
+        end
+    }
+end
+
+function GetPrefixBeforeLastUnderscore(filename)
+    local lastUnderscoreIndex = filename:find("[^_]*_[^_]*$") -- Finds the last occurrence of underscore
+    if lastUnderscoreIndex then
+        local prefix = filename:sub(1, lastUnderscoreIndex - 1) -- Extracts the substring before the last underscore
+        return prefix:gsub("_$", "") -- Removes the last underscore from the result
+    else
+        return filename -- If there's no underscore, return the original filename
+    end
 end
