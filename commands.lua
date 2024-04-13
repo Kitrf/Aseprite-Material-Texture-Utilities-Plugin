@@ -89,8 +89,8 @@ function init(plugin)
     }
 
     plugin:newCommand{
-        id="testCommand",
-        title="Test",
+        id="GenerateTextures",
+        title="Generate Textures",
         group="material_texture_utils",
         onclick=function()
             local imageFileTypes = {"jpg", "jpeg", "png"};
@@ -151,7 +151,7 @@ function init(plugin)
                             for _, searchString in ipairs(searchStrings) do
                                 local lowercaseSearchString = searchString:lower() -- Convert search string to lowercase
                                 if lowercaseFilename:find(lowercaseSearchString) then
-                                    return filename
+                                    return app.fs.joinPath(dlg.data.folder, filename)
                                 end
                             end
                         end
@@ -182,8 +182,99 @@ function init(plugin)
                 end
             end }
 
+            dlg:number{ id="resolution", label="Resolution", text="128", decimals=0 }
+
+            -- Generate textures from files
+            dlg:button{ id="generate", text="Generate Textures", onclick=function()
+                local res = dlg.data.resolution
+
+                local function cloneOpenAndResize(path)
+                    if app.fs.isFile(path) then
+                        local openedSprite = app.open(path) -- Open sprite
+                        if openedSprite then
+                            openedSprite:resize(res, res) -- Resize source file
+                            local clone = openedSprite.cels[1].image:clone()
+                            openedSprite:close()
+                            return clone
+                        end
+                    end
+                    return nil
+                end
+
+                local function openAndResize(path)
+                    if app.fs.isFile(path) then
+                        local openedSprite = app.open(path) -- Open sprite
+                        if openedSprite then
+                            openedSprite:resize(res, res) -- Resize source file
+                            return openedSprite
+                        end
+                    end
+                    return nil
+                end
+
+                -- Generate albedo alpha texture
+                local albedoClone = cloneOpenAndResize(dlg.data.albedo)
+                if albedoClone then
+                    local newAlbedo = Sprite(res, res) -- Create new sprite to contain albedo
+                    newAlbedo.filename = dlg.data.identifier .. "_Albedo"
+                    newAlbedo.cels[1].image = albedoClone
+
+                    -- Combine albedo and alpha
+                    local alphaSprite = openAndResize(dlg.data.alpha)
+                    if alphaSprite then
+                        newAlbedo.filename = newAlbedo.filename .. "_Alpha"
+                        alphaSprite.cels[1].image = RedToAlpha(alphaSprite.cels[1].image)
+                        newAlbedo.cels[1].image = AlphaLockMerge(alphaSprite.cels[1], newAlbedo.cels[1])
+
+                        alphaSprite:close()
+                    end
+                end
+
+                -- Generate roughness metal texture
+                local roguhnessClone = cloneOpenAndResize(dlg.data.roughness)
+                if roguhnessClone then
+                    local newRoughnes = Sprite(res, res) -- Create new sprite to contain albedo
+                    newRoughnes.filename = dlg.data.identifier .. "_Roughness"
+                    newRoughnes.cels[1].image = RedToAlpha(roguhnessClone)
+
+                    -- Combine roughness and metal
+                    local metalSprite = openAndResize(dlg.data.metal)
+                    if metalSprite then
+                        newRoughnes.filename = newRoughnes.filename .. "_Metal"
+                        metalSprite.cels[1].image = IsolateRed(metalSprite.cels[1].image)
+                        newRoughnes.cels[1].image = AlphaLockMerge(newRoughnes.cels[1], metalSprite.cels[1])
+
+                        metalSprite:close()
+                    end
+                end
+
+                -- Generate ambientocclusion texture
+                local aoClone = cloneOpenAndResize(dlg.data.ao)
+                if aoClone then
+                    local newAo = Sprite(res, res) -- Create new sprite to contain albedo
+                    newAo.filename = dlg.data.identifier .. "_AmbientOcclusion"
+                    newAo.cels[1].image = aoClone
+                end
+
+                -- Generate normal texture
+                local normalClone = cloneOpenAndResize(dlg.data.normal)
+                if normalClone then
+                    local newNormal = Sprite(res, res) -- Create new sprite to contain albedo
+                    newNormal.filename = dlg.data.identifier .. "_Normal"
+                    newNormal.cels[1].image = normalClone
+                end
+
+                -- Generate emission texture
+                local emissionClone = cloneOpenAndResize(dlg.data.emission)
+                if emissionClone then
+                    local newEmission = Sprite(res, res) -- Create new sprite to contain albedo
+                    newEmission.filename = dlg.data.identifier .. "_Emission"
+                    newEmission.cels[1].image = emissionClone
+                end
+            end }
+
+            
             -- No onclick overwrite automatically closes dialog
-            dlg:button{ id="generate", text="Confirm" }
             dlg:button{ id="cancel", text="Cancel" }
             dlg:show()
         end
@@ -198,4 +289,39 @@ function GetPrefixBeforeLastUnderscore(filename)
     else
         return filename -- If there's no underscore, return the original filename
     end
+end
+
+function AlphaLockMerge(targetCel, otherCel)
+    local focusedImage = targetCel.image:clone()
+    -- Loop trough all pixels of focused cel
+    for pixel in focusedImage:pixels() do
+        -- Get pixel from other cel with offset
+        local otherPixel = otherCel.image:getPixel(pixel.x + targetCel.position.x, pixel.y + targetCel.position.y)
+        -- Get all colors separately
+        local alphaLock = app.pixelColor.rgbaA(pixel())
+        local red = app.pixelColor.rgbaR(otherPixel)
+        local green = app.pixelColor.rgbaG(otherPixel)
+        local blue = app.pixelColor.rgbaB(otherPixel)
+        -- Overwrite pixel color
+        pixel(app.pixelColor.rgba(red, green, blue, alphaLock))
+    end
+    -- Overwrite focused cel image
+    return focusedImage
+end
+
+function RedToAlpha(targetImage)
+    local image = targetImage:clone()
+    for pixel in image:pixels() do
+        pixel(app.pixelColor.rgba(0, 0, 0, app.pixelColor.rgbaR(pixel())))
+    end
+    return image
+end
+
+function IsolateRed(targetImage)
+    local image = targetImage:clone()
+    for pixel in image:pixels() do
+        local red = app.pixelColor.rgbaR(pixel());
+        pixel(app.pixelColor.rgba(red, 0, 0))
+    end
+    return image
 end
