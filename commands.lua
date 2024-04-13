@@ -94,14 +94,19 @@ function init(plugin)
         group="file_import",
         onclick=function()
             local imageFileTypes = {"jpg", "jpeg", "png"};
-            local dlg = Dialog("Convert Textures")
+            local dlg = Dialog("Generate Textures")
 
-            -- Always create new row
-            dlg:newrow{ always=true }
+            local function toggleAutofill()
+                local enable = false
+                if app.fs.isDirectory(dlg.data.folder) and dlg.data.identifier ~= "" then
+                    enable = true
+                end
+                dlg:modify { id="autofill", enabled=enable }
+            end
 
-            -- Create string field used for autofill identifier
-            dlg:entry{ id="folder", label="Folder path"}
-            dlg:entry{ id="identifier", label="File match name"}
+            local function toggleGenerate(e)
+                dlg:modify { id="generate", enabled=e }
+            end
 
             -- Create button to autofill fields if one is selected
             local function autofillTextures()
@@ -110,8 +115,9 @@ function init(plugin)
 
                     local function filterFilenames(filenames, searchString)
                         local filteredFilenames = {}
+                        local escapedSearchString = searchString:gsub("[-*+?^$().[%]%%]", "%%%0") -- Escape special characters
                         for _, filename in ipairs(filenames) do
-                            if filename:find(searchString) then
+                            if filename:find(escapedSearchString) then
                                 table.insert(filteredFilenames, filename)
                             end
                         end
@@ -136,45 +142,57 @@ function init(plugin)
 
                     if not app.fs.isFile(dlg.data.albedo) then
                         dlg:modify { id="albedo", filename=findFirstMatch(matchingFiles, {"albedo", "color", "base"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.alpha) then
                         dlg:modify { id="alpha", filename=findFirstMatch(matchingFiles, {"alpha", "opacity"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.ao) then
                         dlg:modify { id="ao", filename=findFirstMatch(matchingFiles, {"ambientocclusion", "occlusion", "occ"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.metal) then
                         dlg:modify { id="metal", filename=findFirstMatch(matchingFiles, {"metal"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.roughness) then
                         dlg:modify { id="roughness", filename=findFirstMatch(matchingFiles, {"rough"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.normal) then
                         dlg:modify { id="normal", filename=findFirstMatch(matchingFiles, {"normal"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                     if not app.fs.isFile(dlg.data.emission) then
                         dlg:modify { id="emission", filename=findFirstMatch(matchingFiles, {"emission"}, dlg.data.identifier) }
+                        toggleGenerate(true)
                     end
                 end
             end
 
             local function updateIdentifier()
-                if dlg.data.folder ~= "" then return end
-                if dlg.data.identifier ~= "" then return end
-                for _, path in pairs(dlg.data) do
-                    if type(path) == "string" then
-                        if path ~= "" then
-                            local fileName = app.fs.fileName(path)
-                            dlg:modify { id="folder", text=app.fs.filePath(path) }
-                            dlg:modify { id="identifier", text=GetPrefixBeforeLastUnderscore(fileName) }
-                            if dlg.data.newname == "" then dlg:modify { id="newname", text=dlg.data.identifier } end
-                            break
+                if dlg.data.identifier == "" then
+                    for _, path in pairs(dlg.data) do
+                        if type(path) == "string" then
+                            if path ~= "" then
+                                local fileName = app.fs.fileName(path)
+                                if dlg.data.folder == "" then dlg:modify { id="folder", text=app.fs.filePath(path) } end
+                                dlg:modify { id="identifier", text=GetPrefixBeforeLastUnderscore(fileName) }
+                                if dlg.data.newname == "" then dlg:modify { id="newname", text=dlg.data.identifier } end
+                                break
+                            end
                         end
                     end
                 end
-
+                toggleAutofill()
                 autofillTextures()
             end
+
+            -- Create string field used for autofill identifier
+            dlg:entry{ id="folder", label="Folder path", onchange=toggleAutofill}
+            dlg:entry{ id="identifier", label="File match name", onchange=toggleAutofill}
+            dlg:button{ id="autofill", text="Retry match", hexpand=true, enabled=false, onclick=autofillTextures}
 
             dlg:separator()
 
@@ -195,7 +213,7 @@ function init(plugin)
             dlg:separator()
 
             -- Generate textures from files
-            dlg:button{ id="generate", text="Generate Textures", onclick=function()
+            dlg:button{ id="generate", text="Generate Textures", hexpand=true, enabled=false, onclick=function()
                 local name = dlg.data.identifier
                 if dlg.data.newname ~= "" then name = dlg.data.newname end
                 local res = dlg.data.resolution
