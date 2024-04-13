@@ -91,7 +91,7 @@ function init(plugin)
     plugin:newCommand{
         id="GenerateTextures",
         title="Generate Textures",
-        group="material_texture_utils",
+        group="file_import",
         onclick=function()
             local imageFileTypes = {"jpg", "jpeg", "png"};
             local dlg = Dialog("Convert Textures")
@@ -101,34 +101,10 @@ function init(plugin)
 
             -- Create string field used for autofill identifier
             dlg:entry{ id="folder", label="Folder path"}
-            dlg:entry{ id="identifier", label="Common file name"}
-
-            local function updateIdentifier()
-                if dlg.data.folder ~= "" then return end
-                if dlg.data.identifier ~= "" then return end
-                for _, path in pairs(dlg.data) do
-                    if type(path) == "string" then
-                        if path ~= "" then
-                            local fileName = app.fs.fileName(path)
-                            dlg:modify { id="folder", text=app.fs.filePath(path) }
-                            dlg:modify { id="identifier", text=GetPrefixBeforeLastUnderscore(fileName) }
-                            break
-                        end
-                    end
-                end
-            end
-
-            -- Create file fields for all possible textures
-            dlg:file{ id="albedo", label="Albedo Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="alpha", label="Alpha Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="ao", label="Ambient Occlusion Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="metal", label="Metal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="roughness", label="Roughness Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="normal", label="Normal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
-            dlg:file{ id="emission", label="Emission Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:entry{ id="identifier", label="File match name"}
 
             -- Create button to autofill fields if one is selected
-            dlg:button{ id="autofill", text="Auto find textures", onclick=function()
+            local function autofillTextures()
                 -- If identifier is sete attempt autofill
                 if app.fs.isDirectory(dlg.data.folder) and dlg.data.identifier ~= "" then
 
@@ -180,12 +156,48 @@ function init(plugin)
                         dlg:modify { id="emission", filename=findFirstMatch(matchingFiles, {"emission"}, dlg.data.identifier) }
                     end
                 end
-            end }
+            end
 
+            local function updateIdentifier()
+                if dlg.data.folder ~= "" then return end
+                if dlg.data.identifier ~= "" then return end
+                for _, path in pairs(dlg.data) do
+                    if type(path) == "string" then
+                        if path ~= "" then
+                            local fileName = app.fs.fileName(path)
+                            dlg:modify { id="folder", text=app.fs.filePath(path) }
+                            dlg:modify { id="identifier", text=GetPrefixBeforeLastUnderscore(fileName) }
+                            if dlg.data.newname == "" then dlg:modify { id="newname", text=dlg.data.identifier } end
+                            break
+                        end
+                    end
+                end
+
+                autofillTextures()
+            end
+
+            dlg:separator()
+
+            -- Create file fields for all possible textures
+            dlg:file{ id="albedo", label="Albedo Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="alpha", label="Alpha Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="ao", label="Ambient Occlusion Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="metal", label="Metal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="roughness", label="Roughness Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="normal", label="Normal Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+            dlg:file{ id="emission", label="Emission Texture", filetypes=imageFileTypes, onchange=updateIdentifier }
+
+            dlg:separator()
+
+            dlg:entry{ id="newname", label="Name" }
             dlg:number{ id="resolution", label="Resolution", text="128", decimals=0 }
+
+            dlg:separator()
 
             -- Generate textures from files
             dlg:button{ id="generate", text="Generate Textures", onclick=function()
+                local name = dlg.data.identifier
+                if dlg.data.newname ~= "" then name = dlg.data.newname end
                 local res = dlg.data.resolution
 
                 local function cloneOpenAndResize(path)
@@ -216,7 +228,7 @@ function init(plugin)
                 local albedoClone = cloneOpenAndResize(dlg.data.albedo)
                 if albedoClone then
                     local newAlbedo = Sprite(res, res) -- Create new sprite to contain albedo
-                    newAlbedo.filename = dlg.data.identifier .. "_Albedo"
+                    newAlbedo.filename = name .. "_Albedo"
                     newAlbedo.cels[1].image = albedoClone
 
                     -- Combine albedo and alpha
@@ -234,7 +246,7 @@ function init(plugin)
                 local roguhnessClone = cloneOpenAndResize(dlg.data.roughness)
                 if roguhnessClone then
                     local newRoughnes = Sprite(res, res) -- Create new sprite to contain albedo
-                    newRoughnes.filename = dlg.data.identifier .. "_Roughness"
+                    newRoughnes.filename = name .. "_Roughness"
                     newRoughnes.cels[1].image = RedToAlpha(roguhnessClone)
 
                     -- Combine roughness and metal
@@ -252,7 +264,7 @@ function init(plugin)
                 local aoClone = cloneOpenAndResize(dlg.data.ao)
                 if aoClone then
                     local newAo = Sprite(res, res) -- Create new sprite to contain albedo
-                    newAo.filename = dlg.data.identifier .. "_AmbientOcclusion"
+                    newAo.filename = name .. "_AmbientOcclusion"
                     newAo.cels[1].image = aoClone
                 end
 
@@ -260,7 +272,7 @@ function init(plugin)
                 local normalClone = cloneOpenAndResize(dlg.data.normal)
                 if normalClone then
                     local newNormal = Sprite(res, res) -- Create new sprite to contain albedo
-                    newNormal.filename = dlg.data.identifier .. "_Normal"
+                    newNormal.filename = name .. "_Normal"
                     newNormal.cels[1].image = normalClone
                 end
 
@@ -268,14 +280,13 @@ function init(plugin)
                 local emissionClone = cloneOpenAndResize(dlg.data.emission)
                 if emissionClone then
                     local newEmission = Sprite(res, res) -- Create new sprite to contain albedo
-                    newEmission.filename = dlg.data.identifier .. "_Emission"
+                    newEmission.filename = name .. "_Emission"
                     newEmission.cels[1].image = emissionClone
                 end
+
+                Dialog:close() -- Close dialog when generated
             end }
 
-            
-            -- No onclick overwrite automatically closes dialog
-            dlg:button{ id="cancel", text="Cancel" }
             dlg:show()
         end
     }
