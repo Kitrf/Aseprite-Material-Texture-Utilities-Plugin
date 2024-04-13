@@ -284,7 +284,7 @@ function init(plugin)
                     newEmission.cels[1].image = emissionClone
                 end
 
-                Dialog:close() -- Close dialog when generated
+                dlg:close() -- Close dialog when generated
             end }
 
             dlg:show()
